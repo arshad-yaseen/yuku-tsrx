@@ -1,5 +1,3 @@
-// every fixture parses and analyzes cleanly, and prints back to source that reparses to the same
-// code. tests the built package, as it ships
 import { expect, test } from "bun:test";
 import { readdirSync } from "node:fs";
 import { analyze, generate, parse } from "yuku-tsrx";
