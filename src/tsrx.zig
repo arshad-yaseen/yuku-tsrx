@@ -54,6 +54,7 @@ pub const Node = enum {
                     "{\"await\":false,\"statementType\":\"ForOfStatement\"}",
                 .block_scope = true,
                 .lexical_bindings = true,
+                .iteration = true,
             },
             .@"switch" => .{
                 .type = "JSXSwitchExpression",
@@ -70,7 +71,7 @@ pub const Node = enum {
                 .type = "CatchClause",
                 .fields = &.{ "param", "resetParam", "body" },
                 .block_scope = true,
-                .lexical_bindings = true,
+                .catch_bindings = true,
             },
             .style => .{
                 .type = "JSXStyleElement",
@@ -85,13 +86,19 @@ pub const Node = enum {
     }
 };
 
-/// A code block or a directive at the start of a statement.
+/// A code block, a directive, or an element at the start of a statement, which needs no `;`
+/// before a tag, as in `<a /> <b />`.
 pub fn statement(p: *Parser) Error!Claim {
-    if (constructAt(p, p.token()) == null) return .decline;
-    const start = p.token().span.start;
+    const token = p.token();
+    if (constructAt(p, token) == null and !opensTagAt(p, token)) return .decline;
+    const start = token.span.start;
 
     const value = try p.parseExpression(ast.Precedence.Lowest) orelse return .failed;
-    const end = try p.semicolon(p.tree().span(value).end) orelse return .failed;
+    const value_end = p.tree().span(value).end;
+    const end = if (isOutput(p.tree(), value) and opensTagAt(p, p.token()))
+        value_end
+    else
+        try p.semicolon(value_end) orelse return .failed;
     return claimed(try p.tree().addNode(
         .{ .expression_statement = .{ .expression = value } },
         .{ .start = start, .end = end },
@@ -110,18 +117,18 @@ pub fn expression(p: *Parser) Error!Claim {
     return claimed(value);
 }
 
-/// A tag at the start of a line starts an element.
-pub fn operator(p: *Parser, _: NodeIndex, _: u8) Error!Claim {
+/// A tag at the start of a line, or after output, starts an element.
+pub fn operator(p: *Parser, left: NodeIndex, _: u8) Error!Claim {
     const token = p.token();
-    if (token.tag != .less_than or !token.hasLineTerminatorBefore()) return .decline;
-    return if (opensTag(p, token.span.end)) .end else .decline;
+    if (!token.hasLineTerminatorBefore() and !isOutput(p.tree(), left)) return .decline;
+    return if (opensTagAt(p, token)) .end else .decline;
 }
 
 /// A code block as the body of a function, method, or arrow function.
 pub fn function_body(p: *Parser) Error!Claim {
     if (constructAt(p, p.token()) != .code_block) return .decline;
 
-    const body = try parseCodeBlock(p) orelse return .failed;
+    const body = try parseCodeBlock(p, .any) orelse return .failed;
     if (!try p.advance()) return .failed;
     return claimed(body);
 }
@@ -241,7 +248,7 @@ fn constructAt(p: *const Parser, at: Token) ?Construct {
 fn parseConstruct(p: *Parser, construct: Construct) Error!?NodeIndex {
     std.debug.assert(p.token().tag == .at);
     return switch (construct) {
-        .code_block => parseCodeBlock(p),
+        .code_block => parseCodeBlock(p, .no_return),
         .@"if" => parseIf(p),
         .@"for" => parseFor(p),
         .@"switch" => parseSwitch(p),
@@ -249,13 +256,13 @@ fn parseConstruct(p: *Parser, construct: Construct) Error!?NodeIndex {
     };
 }
 
-fn parseCodeBlock(p: *Parser) Error!?NodeIndex {
+fn parseCodeBlock(p: *Parser, rule: Rule) Error!?NodeIndex {
     const start = p.token().span.start;
     if (!try p.advance()) return null;
 
     var items = p.list();
     defer items.reset();
-    const render = try parseTemplateItems(p, &items) orelse return null;
+    const render = try parseTemplateItems(p, &items, rule) orelse return null;
     if (render == .null) try items.append(.null);
     return try p.addNode(.code_block, items.items(), .{
         .start = start,
@@ -263,7 +270,7 @@ fn parseCodeBlock(p: *Parser) Error!?NodeIndex {
     });
 }
 
-fn parseTemplate(p: *Parser) Error!?NodeIndex {
+fn parseTemplate(p: *Parser, rule: Rule) Error!?NodeIndex {
     const open = p.token();
     if (open.tag != .left_brace) {
         try p.report(open.span, "TSRX1008: Expected `{` after JSX control-flow directive.");
@@ -272,16 +279,26 @@ fn parseTemplate(p: *Parser) Error!?NodeIndex {
 
     var items = p.list();
     defer items.reset();
-    _ = try parseTemplateItems(p, &items) orelse return null;
+    _ = try parseTemplateItems(p, &items, rule) orelse return null;
     return try p.addNode(.template, items.items(), .{
         .start = open.span.start,
         .end = p.token().span.end,
     });
 }
 
+// what a template's statements may not do, as @tsrx/core reports while parsing. its analysis
+// checks the bodies of `@if` and `@for`
+const Rule = enum {
+    any,
+    /// TSRX2001, a `return` outside loops and nested functions
+    no_return,
+    /// TSRX2008 and TSRX2009, a `break` or `return` statement of an `@case`
+    case,
+};
+
 // statements, then at most one output, between braces, leaving the `}` current. returns the
 // output, `.null` without one
-fn parseTemplateItems(p: *Parser, items: *const dialect.List) Error!?NodeIndex {
+fn parseTemplateItems(p: *Parser, items: *const dialect.List, rule: Rule) Error!?NodeIndex {
     std.debug.assert(p.token().tag == .left_brace);
     if (!try p.advance()) return null;
 
@@ -293,8 +310,7 @@ fn parseTemplateItems(p: *Parser, items: *const dialect.List) Error!?NodeIndex {
             return null;
         }
         const construct = constructAt(p, token);
-        const opens_output = construct != null or
-            (token.tag == .less_than and opensTag(p, token.span.end));
+        const opens_output = construct != null or opensTagAt(p, token);
         if (output != .null) {
             try p.report(token.span, if (opens_output)
                 "TSRX2011: A code block renders a single node; wrap multiple nodes or text " ++
@@ -305,7 +321,9 @@ fn parseTemplateItems(p: *Parser, items: *const dialect.List) Error!?NodeIndex {
             return null;
         }
         if (!opens_output) {
-            try items.append(try p.parseStatement() orelse return null);
+            const statement_node = try p.parseStatement() orelse return null;
+            if (try reportedStatement(p, statement_node, rule)) return null;
+            try items.append(statement_node);
             continue;
         }
         output = if (construct) |opened|
@@ -317,6 +335,70 @@ fn parseTemplateItems(p: *Parser, items: *const dialect.List) Error!?NodeIndex {
         if (p.token().tag == .semicolon and !try p.advance()) return null;
     }
     return output;
+}
+
+// reports a statement the rule forbids
+fn reportedStatement(p: *Parser, node: NodeIndex, rule: Rule) Error!bool {
+    const tree = p.tree();
+    switch (rule) {
+        .any => return false,
+        .no_return => {
+            const found = templateReturn(tree, node);
+            if (found == .null) return false;
+            try p.report(tree.span(found), "TSRX2001: Return statements are not allowed inside " ++
+                "TSRX templates. Move the return before the TSRX return value, or use " ++
+                "conditional rendering instead.");
+        },
+        .case => switch (tree.data(node)) {
+            .break_statement => try p.report(
+                tree.span(node),
+                "TSRX2008: `break` is invalid inside `@switch` cases.",
+            ),
+            .return_statement => try p.report(
+                tree.span(node),
+                "TSRX2009: `return` is invalid inside `@switch` cases.",
+            ),
+            else => return false,
+        },
+    }
+    return true;
+}
+
+// the first `return` of a statement outside loops and nested functions, `.null` without one
+fn templateReturn(tree: *const ast.Tree, node: NodeIndex) NodeIndex {
+    if (node == .null) return .null;
+    switch (tree.data(node)) {
+        .return_statement => return node,
+        .block_statement => |block| return firstTemplateReturn(tree, tree.extra(block.body)),
+        .labeled_statement => |labeled| return templateReturn(tree, labeled.body),
+        .with_statement => |scoped| return templateReturn(tree, scoped.body),
+        .catch_clause => |clause| return templateReturn(tree, clause.body),
+        .if_statement => |branch| {
+            const found = templateReturn(tree, branch.consequent);
+            return if (found != .null) found else templateReturn(tree, branch.alternate);
+        },
+        .try_statement => |attempt| return firstTemplateReturn(
+            tree,
+            &.{ attempt.block, attempt.handler, attempt.finalizer },
+        ),
+        .switch_statement => |selection| {
+            for (tree.extra(selection.cases)) |case| {
+                const consequent = tree.extra(tree.data(case).switch_case.consequent);
+                const found = firstTemplateReturn(tree, consequent);
+                if (found != .null) return found;
+            }
+            return .null;
+        },
+        else => return .null,
+    }
+}
+
+fn firstTemplateReturn(tree: *const ast.Tree, statements: []const NodeIndex) NodeIndex {
+    for (statements) |statement_node| {
+        const found = templateReturn(tree, statement_node);
+        if (found != .null) return found;
+    }
+    return .null;
 }
 
 fn parseIf(p: *Parser) Error!?NodeIndex {
@@ -331,14 +413,14 @@ fn parseIfRest(p: *Parser, kind: Node, start: u32) Error!?NodeIndex {
     if (!try p.advance()) return null;
 
     const condition = try parseHead(p) orelse return null;
-    const consequent = try parseTemplate(p) orelse return null;
+    const consequent = try parseTemplate(p, .any) orelse return null;
     var alternate: NodeIndex = .null;
     if (hasClause(p, "else")) {
         if (!try enterClause(p)) return null;
         alternate = if (p.token().tag == .@"if")
             try parseIfRest(p, .else_if, p.token().span.start) orelse return null
         else
-            try parseTemplate(p) orelse return null;
+            try parseTemplate(p, .any) orelse return null;
     } else if (try reportedBareClause(p, "else", "if")) {
         return null;
     }
@@ -372,11 +454,11 @@ fn parseFor(p: *Parser) Error!?NodeIndex {
     }
     if (!try p.expect(.right_paren, "Expected ')' to close the `@for` head")) return null;
 
-    const body = try parseTemplate(p) orelse return null;
+    const body = try parseTemplate(p, .any) orelse return null;
     var empty: NodeIndex = .null;
     if (hasClause(p, "empty")) {
         if (!try enterClause(p)) return null;
-        empty = try parseTemplate(p) orelse return null;
+        empty = try parseTemplate(p, .any) orelse return null;
     } else if (try reportedBareClause(p, "empty", "for")) {
         return null;
     }
@@ -449,7 +531,7 @@ fn parseCase(p: *Parser) Error!?NodeIndex {
     if (is_case) condition = try p.parseExpression(ast.Precedence.Lowest) orelse return null;
     if (!try p.expect(.colon, "Expected ':' after the case")) return null;
 
-    const body = try parseTemplate(p) orelse return null;
+    const body = try parseTemplate(p, .case) orelse return null;
     return try p.addNode(.case, &.{ condition, body }, .{
         .start = at.span.start,
         .end = p.token().span.end,
@@ -459,18 +541,21 @@ fn parseCase(p: *Parser) Error!?NodeIndex {
 fn parseTry(p: *Parser) Error!?NodeIndex {
     const start = p.token().span.start;
     if (!try p.advance() or !try p.advance()) return null;
-    const block = try parseTemplate(p) orelse return null;
+    const block = try parseTemplate(p, .no_return) orelse return null;
 
     var pending: NodeIndex = .null;
     if (hasClause(p, "pending")) {
         if (!try enterClause(p)) return null;
-        pending = try parseTemplate(p) orelse return null;
+        pending = try parseTemplate(p, .no_return) orelse return null;
     }
     var handler: NodeIndex = .null;
-    if (hasClause(p, "catch")) handler = try parseCatch(p) orelse return null;
+    if (hasClause(p, "catch")) {
+        handler = try parseCatch(p) orelse return null;
+    } else if (try reportedBareClause(p, "catch", "try")) {
+        return null;
+    }
     if (pending == .null and handler == .null) {
         if (try reportedBareClause(p, "pending", "try")) return null;
-        if (try reportedBareClause(p, "catch", "try")) return null;
         try p.report(
             .{ .start = start, .end = p.token().span.end },
             "TSRX1010: Missing `@catch` or `@pending` after `@try` block.",
@@ -502,7 +587,7 @@ fn parseCatch(p: *Parser) Error!?NodeIndex {
             return null;
         }
     }
-    const body = try parseTemplate(p) orelse return null;
+    const body = try parseTemplate(p, .no_return) orelse return null;
     return try p.addNode(.@"catch", &.{ param, reset, body }, .{
         .start = start,
         .end = p.token().span.end,
@@ -640,6 +725,18 @@ fn opensTag(p: *const Parser, offset: u32) bool {
             return name.span.start == offset and name.tag.isIdentifierLike();
         },
     }
+}
+
+fn opensTagAt(p: *const Parser, token: Token) bool {
+    return token.tag == .less_than and opensTag(p, token.span.end);
+}
+
+// an element, a fragment, or a construct
+fn isOutput(tree: *const ast.Tree, node: NodeIndex) bool {
+    return switch (tree.data(node)) {
+        .jsx_element, .jsx_fragment, .dialect => true,
+        else => false,
+    };
 }
 
 // whether a `<style` tag follows the `<` ending at `offset`, its name read whole by `parseElement`

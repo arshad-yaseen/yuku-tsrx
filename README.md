@@ -30,7 +30,7 @@ It runs in Node.js 14.18 or newer, Bun, Deno, Workers, and browsers.
 
 ## Benchmark
 
-Parsing the 2,017 TSRX sources of the [test suite](test/suite) against the official parser, [`@tsrx/core`](https://www.npmjs.com/package/@tsrx/core), both building an ESTree AST.
+Parsing the 1,987 TSRX sources of the [test suite](test/suite) against the official parser, [`@tsrx/core`](https://www.npmjs.com/package/@tsrx/core), both building an ESTree AST.
 
 ![Time per file to parse with yuku-tsrx and @tsrx/core](bench/chart.svg)
 
@@ -48,7 +48,7 @@ bun run test
 bun run sync       # syncs test/suite with the TSRX repository at the release of @tsrx/core
 ```
 
-The test suite is every `.tsrx` file of the [TSRX repository](https://github.com/tsrx-org/tsrx) and every case in the tests of `@tsrx/core`, each expected to parse, or fail, as the official parser parses it.
+The test suite is every `.tsrx` file of the [TSRX repository](https://github.com/tsrx-org/tsrx) and every case in the tests of `@tsrx/core`, each expected to parse, or fail, as the official parser parses it, except where it accepts what TypeScript rejects.
 
 ## License
 
