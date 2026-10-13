@@ -9,7 +9,7 @@ interface Parser {
 }
 
 const RUNS = 3;
-const FIXTURES = new URL("../test/fixtures/", import.meta.url);
+const FIXTURES = new URL("fixtures/", import.meta.url);
 
 const PARSERS: Parser[] = [
   {
@@ -17,8 +17,8 @@ const PARSERS: Parser[] = [
     color: "#FF6B35",
     async load() {
       const { parse } = await import("yuku-tsrx");
-      // reading `program` builds the AST, with comments attached as @tsrx/core attaches them
-      return (source, path) => parse(source, { path, attachComments: true }).program;
+      // reading `program` builds the AST
+      return (source, path) => parse(source, { path }).program;
     },
   },
   {
@@ -39,9 +39,11 @@ else process.stdout.write(String(await time(child)));
 function main(): void {
   const results = PARSERS.map((parser) => {
     const runs = Array.from({ length: RUNS }, () => spawn(parser));
-    return { ...parser, ms: median(runs) };
+    return { ...parser, microseconds: median(runs) };
   });
-  console.table(results.map(({ name, ms }) => ({ parser: name, median: format(ms) })));
+  console.table(
+    results.map(({ name, microseconds }) => ({ parser: name, "per file": format(microseconds) })),
+  );
   writeFileSync(new URL("chart.svg", import.meta.url), chart(results));
 }
 
@@ -55,10 +57,9 @@ function spawn(parser: Parser): number {
 }
 
 async function time(parser: Parser): Promise<number> {
-  const files = readdirSync(FIXTURES).map((name) => ({
-    name,
-    source: readFileSync(new URL(name, FIXTURES), "utf8"),
-  }));
+  const files = readdirSync(FIXTURES)
+    .filter((name) => name.endsWith(".tsrx"))
+    .map((name) => ({ name, source: readFileSync(new URL(name, FIXTURES), "utf8") }));
   const parse = await parser.load();
   const bench = new Bench({ time: 5000, warmupTime: 1000 });
   bench.add(parser.name, () => {
@@ -67,7 +68,7 @@ async function time(parser: Parser): Promise<number> {
   await bench.run();
   const { result } = bench.tasks[0]!;
   if (result.state !== "completed") throw new Error(`${parser.name} did not complete`);
-  return result.latency.p50;
+  return (result.latency.p50 * 1000) / files.length;
 }
 
 function median(values: number[]): number {
@@ -76,26 +77,26 @@ function median(values: number[]): number {
   return sorted.length % 2 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
 }
 
-function format(ms: number): string {
-  return `${ms.toFixed(ms < 10 ? 2 : 1)} ms`;
+function format(microseconds: number): string {
+  return `${microseconds.toFixed(1)} µs`;
 }
 
-function chart(results: (Parser & { ms: number })[]): string {
+function chart(results: (Parser & { microseconds: number })[]): string {
   const width = 640;
   const barX = 96;
-  const fastest = Math.min(...results.map((result) => result.ms));
-  const slowest = Math.max(...results.map((result) => result.ms));
-  const rows = results.map(({ name, color, ms }, index) => {
+  const fastest = Math.min(...results.map((result) => result.microseconds));
+  const slowest = Math.max(...results.map((result) => result.microseconds));
+  const rows = results.map(({ name, color, microseconds }, index) => {
     const y = index * 30;
     const middle = y + 11;
-    const barEnd = barX + Math.round((ms / slowest) * (width - barX - 80));
+    const barEnd = barX + Math.round((microseconds / slowest) * (width - barX - 80));
     const row = [
       `<text x="${barX - 10}" y="${middle}" text-anchor="end">${name}</text>`,
       `<rect x="${barX}" y="${y}" width="${barEnd - barX}" height="22" rx="4" fill="${color}"/>`,
-      `<text x="${barEnd + 8}" y="${middle}">${format(ms)}</text>`,
+      `<text x="${barEnd + 8}" y="${middle}">${format(microseconds)}</text>`,
     ];
-    if (ms !== fastest) {
-      const ratio = `${(ms / fastest).toFixed(2)}×`;
+    if (microseconds !== fastest) {
+      const ratio = `${(microseconds / fastest).toFixed(2)}×`;
       row.push(`<text class="ratio" x="${barEnd - 8}" y="${middle}" text-anchor="end">${ratio}</text>`);
     }
     return row.join("\n  ");

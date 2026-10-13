@@ -30,11 +30,11 @@ It runs in Node.js 14.18 or newer, Bun, Deno, Workers, and browsers.
 
 ## Benchmark
 
-Parsing the 11 pages of the TSRX website in [`test/fixtures`](test/fixtures) (327 KB) against the official parser, [`@tsrx/core`](https://www.npmjs.com/package/@tsrx/core), both building an ESTree AST with comments attached.
+Parsing the 61 small TSRX files of the [TSRX repository](https://github.com/tsrx-org/tsrx) in [`bench/fixtures`](bench/fixtures) against the official parser, [`@tsrx/core`](https://www.npmjs.com/package/@tsrx/core), both building an ESTree AST.
 
-![Parse time of yuku-tsrx and @tsrx/core](bench/chart.svg)
+![Time per file to parse with yuku-tsrx and @tsrx/core](bench/chart.svg)
 
-Medians of 3 runs, each in a fresh Node.js 24 process on an Apple M3. Run it with `bun run bench`.
+Median time per file over 3 runs, each in a fresh Node.js 24 process on an Apple M3. Run it with `bun run bench`.
 
 ## Development
 
