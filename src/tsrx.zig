@@ -1,4 +1,4 @@
-//! TSRX as a Yuku dialect, following the [TSRX specification](https://tsrx.dev/specification).
+//! TSRX as a Yuku dialect (https://yuku.fyi/parser/dialect/), following the [TSRX specification](https://tsrx.dev/specification).
 
 const std = @import("std");
 const yuku = @import("parser");
