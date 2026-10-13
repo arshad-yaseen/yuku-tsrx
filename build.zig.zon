@@ -1,0 +1,14 @@
+.{
+    .name = .yuku_tsrx,
+    .version = "0.1.0",
+    .fingerprint = 0xc799211be0d98b71,
+    .minimum_zig_version = "0.17.0",
+    .dependencies = .{
+        .yuku = .{ .path = "../yuku" },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
