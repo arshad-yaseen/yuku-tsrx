@@ -9,7 +9,7 @@ interface Parser {
 }
 
 const RUNS = 3;
-const FIXTURES = new URL("fixtures/", import.meta.url);
+const FIXTURES = new URL("../test/suite/pass/", import.meta.url);
 
 const PARSERS: Parser[] = [
   {

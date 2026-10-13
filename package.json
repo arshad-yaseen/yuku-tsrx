@@ -27,6 +27,7 @@
     "test": "bun run build && bun test",
     "typecheck": "tsc",
     "bench": "bun run build && node bench/index.ts",
+    "sync": "bun test/sync.ts",
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
