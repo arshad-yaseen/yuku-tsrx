@@ -1,20 +1,16 @@
-import { tsrx } from "#module";
-import { parse as parseYuku, type ParseOptions, type ParseResult } from "yuku";
-import { analyze as analyzeYuku, type AnalyzeOptions, type Module } from "yuku/analyzer";
+import { tsrx } from "#core";
+import { parse as parseYuku, type ParseOptions, type SourceFile } from "yuku";
 
 export type * from "./ast";
-export { generate } from "./codegen";
-
-type TSRXOptions<T> = Omit<T, "lang" | "wasm">;
+export { print } from "./print";
 
 /**
- * Parses TSRX into an ESTree program, with TSRX's own nodes.
+ * Parses TSRX into an ESTree program with TSRX's own nodes, and with `semantic`, its scopes,
+ * bindings, references, imports, and exports.
  */
-export function parse(source: string, options: TSRXOptions<ParseOptions> = {}): ParseResult {
-  return parseYuku(source, { preserveParens: false, ...options, wasm: tsrx });
-}
-
-/** Parses and analyzes TSRX, with its scopes, bindings, references, imports, and exports. */
-export function analyze(source: string, options: TSRXOptions<AnalyzeOptions> = {}): Module {
-  return analyzeYuku(source, { ...options, wasm: tsrx });
+export function parse(
+  source: string | Uint8Array,
+  options: Omit<ParseOptions, "lang" | "core"> = {},
+): SourceFile {
+  return parseYuku(source, { preserveParens: false, ...options, core: tsrx });
 }

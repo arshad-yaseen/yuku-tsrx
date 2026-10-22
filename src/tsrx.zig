@@ -7,7 +7,7 @@ const ast = yuku.ast;
 const dialect = yuku.dialect;
 
 const Claim = dialect.Claim;
-const Error = dialect.Error;
+const Error = std.mem.Allocator.Error;
 const NodeIndex = ast.NodeIndex;
 const Parser = dialect.Parser;
 const Token = ast.Token;
@@ -140,13 +140,13 @@ pub fn jsx_child(p: *Parser, offset: u32, parent: NodeIndex) Error!Claim {
         if (try rawBodyEnd(p, parent, offset)) |end| {
             const text = p.tree().sourceSlice(offset, end);
             return claimed(try p.tree().addNode(
-                .{ .jsx_text = .{ .value = text, .raw = text } },
+                .{ .jsx_text = .{ .raw = text } },
                 .{ .start = offset, .end = end },
             ));
         }
     }
 
-    const source = p.source();
+    const source = p.tree().source;
     switch (source[offset]) {
         '@' => if (constructAt(p, p.tokenAt(offset))) |construct| {
             if (!try p.seek(offset)) return .failed;
@@ -157,7 +157,7 @@ pub fn jsx_child(p: *Parser, offset: u32, parent: NodeIndex) Error!Claim {
             return claimed(try parseElement(p) orelse return .failed);
         },
         '/' => if (commentAt(source, offset, offset)) |comment| {
-            try p.addComment(comment.type, comment.span);
+            try p.recordComment(comment.type, comment.span);
             const empty = try p.tree().addNode(.{ .jsx_empty_expression = .{} }, comment.span);
             return claimed(try p.tree().addNode(
                 .{ .jsx_expression_container = .{ .expression = empty } },
@@ -651,7 +651,7 @@ fn parseElement(p: *Parser) Error!?NodeIndex {
 
 // where the CSS of a `<style>` or the script of a `<script>` ends, kept as written
 fn rawBodyEnd(p: *Parser, opening: NodeIndex, start: u32) Error!?u32 {
-    const source = p.source();
+    const source = p.tree().source;
     const end: u32 = switch (rawElement(p.tree(), opening)) {
         .none => return null,
         .style => end: {
@@ -678,7 +678,7 @@ fn rawElement(tree: *const ast.Tree, opening: NodeIndex) RawElement {
 // TSRX1004, a script ends at `</script`, whitespace, and `>`, in any letter case, and holds no
 // other `</script`
 fn scriptEnd(p: *Parser, start: u32) Error!u32 {
-    const source = p.source();
+    const source = p.tree().source;
     const tag = "</script";
     var index = start;
     while (std.mem.findPos(u8, source, index, "</")) |found| : (index = @intCast(found + 2)) {
@@ -717,8 +717,8 @@ fn isTagKey(tree: *const ast.Tree, node: NodeIndex) bool {
 // whether a name, `/`, `>`, or `{` touches the `<` ending at `offset`, opening a tag. an ASCII
 // byte decides without lexing, which also keeps `<>=` a fragment
 fn opensTag(p: *const Parser, offset: u32) bool {
-    if (offset == p.source().len) return false;
-    switch (p.source()[offset]) {
+    if (offset == p.tree().source.len) return false;
+    switch (p.tree().source[offset]) {
         'a'...'z', 'A'...'Z', '/', '>', '{' => return true,
         else => {
             const name = p.tokenAt(offset);
@@ -741,14 +741,14 @@ fn isOutput(tree: *const ast.Tree, node: NodeIndex) bool {
 
 // whether a `<style` tag follows the `<` ending at `offset`, its name read whole by `parseElement`
 fn opensStyle(p: *const Parser, offset: u32) bool {
-    if (!std.mem.startsWith(u8, p.source()[offset..], "style")) return false;
+    if (!std.mem.startsWith(u8, p.tree().source[offset..], "style")) return false;
     const name = p.tokenAt(offset);
     return name.span.start == offset and isWord(p, name, "style");
 }
 
 // a word as written, so an escaped keyword is not one
 fn isWord(p: *const Parser, token: Token, word: []const u8) bool {
-    return std.mem.eql(u8, token.text(p.source()), word);
+    return std.mem.eql(u8, token.text(p.tree().source), word);
 }
 
 const Comment = struct { type: ast.Comment.Type, span: ast.Span };
@@ -772,7 +772,7 @@ fn commentAt(source: []const u8, index: u32, run_start: u32) ?Comment {
 
 // where a run of template text ends
 fn textEnd(p: *const Parser, start: u32) u32 {
-    const source = p.source();
+    const source = p.tree().source;
     var index = start;
     while (std.mem.findAnyPos(u8, source, index, "{}<@/")) |found| : (index += 1) {
         index = @intCast(found);

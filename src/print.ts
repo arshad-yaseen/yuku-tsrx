@@ -1,19 +1,26 @@
-import type { BlockStatement, IfStatement, Node, SwitchCase } from "yuku/types";
 import {
-  generate as generateYuku,
-  type GenerateOptions,
-  type GenerateResult,
+  print as printYuku,
+  type BlockStatement,
+  type IfStatement,
+  type Node,
+  type PrintOptions,
+  type PrintResult,
   type Printer,
   type Printers,
-} from "yuku/codegen";
+  type SourceFile,
+  type SwitchCase,
+} from "yuku";
 import type { JSXIfExpression } from "./ast";
 
-/** Prints a TSRX program, or any node in one, back to source. */
-export function generate(node: Node, options: Omit<GenerateOptions, "print"> = {}): GenerateResult {
-  return generateYuku(node, { ...options, print });
+/** Prints a TSRX file, or any node in one, back to source. */
+export function print(
+  target: SourceFile | Node,
+  options: Omit<PrintOptions, "printers"> = {},
+): PrintResult {
+  return printYuku(target, { ...options, printers });
 }
 
-const print = {
+const printers = {
   JSXCodeBlock(node, p) {
     p.write("@");
     p.block(node.render === null ? node.body : [...node.body, node.render]);

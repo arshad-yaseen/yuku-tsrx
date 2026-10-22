@@ -14,9 +14,11 @@
     "./package.json": "./package.json"
   },
   "imports": {
-    "#module": {
-      "workerd": "./dist/module/workerd.js",
-      "default": "./dist/module/inline.js"
+    "#core": {
+      "workerd": "./dist/core/workerd.js",
+      "edge-light": "./dist/core/workerd.js",
+      "node": "./dist/core/node.js",
+      "default": "./dist/core/default.js"
     }
   },
   "files": [
@@ -38,9 +40,9 @@
     "typescript": "7.0.2"
   },
   "engines": {
-    "node": ">=14.18.0"
+    "node": ">=16.4.0"
   },
   "dependencies": {
-    "yuku": "^0.20.0"
+    "yuku": "^0.23.0"
   }
 }

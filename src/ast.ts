@@ -14,9 +14,9 @@ import type {
   Statement,
   SwitchCase,
   VariableDeclaration,
-} from "yuku/types";
+} from "yuku";
 
-declare module "yuku/types" {
+declare module "yuku" {
   interface DialectNodes {
     JSXCodeBlock: JSXCodeBlock;
     JSXIfExpression: JSXIfExpression;

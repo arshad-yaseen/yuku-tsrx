@@ -9,7 +9,7 @@ npm install yuku-tsrx
 ## Usage
 
 ```ts
-import { analyze, generate, parse } from "yuku-tsrx";
+import { parse, print } from "yuku-tsrx";
 
 const source = `export const List = ({ items }) => @{
   @for (const item of items; key item.id) {
@@ -19,14 +19,16 @@ const source = `export const List = ({ items }) => @{
   }
 }`;
 
-const { program, diagnostics } = parse(source);
+const file = parse(source, { semantic: true });
 
-analyze(source).rootScope.find("List");
+file.program;
+file.diagnostics;
+file.rootScope.find("List");
 
-generate(program).code;
+print(file).code;
 ```
 
-It runs in Node.js 14.18 or newer, Bun, Deno, Workers, and browsers.
+It runs natively in Node.js 16.4 or newer, Bun, and Deno on macOS, Linux, and Windows, and as WebAssembly in Workers, browsers, and everywhere else.
 
 ## Benchmark
 

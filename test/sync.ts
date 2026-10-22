@@ -5,8 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 // @ts-expect-error @tsrx/core types itself with JSDoc in JavaScript
 import { parseModule } from "@tsrx/core";
-import { parse } from "yuku";
-import { walk } from "yuku/ast";
+import { parse, walk } from "yuku";
 
 const SUITE = new URL("suite/", import.meta.url);
 // what @tsrx/core reads, as acorn does, though TypeScript rejects it

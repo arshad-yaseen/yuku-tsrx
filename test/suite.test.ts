@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
-import type { ParseResult } from "yuku";
-import { generate, parse } from "yuku-tsrx";
+import type { SourceFile } from "yuku";
+import { parse, print } from "yuku-tsrx";
 
-const errors = ({ diagnostics }: ParseResult) =>
+const errors = ({ diagnostics }: SourceFile) =>
   diagnostics.filter((d) => d.severity === "error").map((d) => d.message);
 
 for (const kind of ["pass", "fail"]) {
@@ -17,9 +17,9 @@ for (const kind of ["pass", "fail"]) {
     }
     expect(errors(result)).toEqual([]);
 
-    const { code } = generate(result.program);
+    const { code } = print(result.program);
     const printed = parse(code, { path: name });
     expect(errors(printed)).toEqual([]);
-    expect(generate(printed.program).code).toBe(code);
+    expect(print(printed.program).code).toBe(code);
   });
 }
