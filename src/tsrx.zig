@@ -2,6 +2,7 @@
 
 const std = @import("std");
 const yuku = @import("parser");
+const css = @import("css.zig");
 
 const ast = yuku.ast;
 const dialect = yuku.dialect;
@@ -27,6 +28,26 @@ pub const Node = enum {
     @"catch",
     style,
     shorthand,
+    style_sheet,
+    rule,
+    atrule,
+    block,
+    declaration,
+    selector_list,
+    complex_selector,
+    relative_selector,
+    combinator,
+    descendant_combinator,
+    type_selector,
+    id_selector,
+    class_selector,
+    pseudo_class_selector,
+    pseudo_element_selector,
+    attribute_selector,
+    nesting_selector,
+    nth,
+    percentage,
+    text,
 
     pub fn shape(node: Node) dialect.Shape {
         return switch (node) {
@@ -83,6 +104,7 @@ pub const Node = enum {
                 .fields = &.{ "name", "value" },
                 .properties = "{\"shorthand\":true}",
             },
+            else => css.shape(node),
         };
     }
 };
@@ -639,14 +661,19 @@ fn parseElement(p: *Parser) Error!?NodeIndex {
     const parts = tree.data(element).jsx_element;
     if (rawElement(tree, parts.opening_element) != .style) return element;
     const children = tree.extra(parts.children);
-    for (children) |child| if (tree.data(child) != .jsx_text) return element;
-
-    var items = p.list();
-    defer items.reset();
-    try items.append(parts.opening_element);
-    for (children) |child| try items.append(child);
-    try items.append(parts.closing_element);
-    return try p.addNode(.style, items.items(), tree.span(element));
+    if (children.len == 0 and parts.closing_element == .null) {
+        return try p.addNode(.style, &.{ parts.opening_element, .null }, tree.span(element));
+    }
+    const sheet = switch (children.len) {
+        0 => empty: {
+            const at = tree.span(parts.opening_element).end;
+            break :empty (try css.parse(p, .{ .start = at, .end = at })).?;
+        },
+        1 => if (isKind(tree, children[0], .style_sheet)) children[0] else return element,
+        else => return element,
+    };
+    const items = .{ parts.opening_element, sheet, parts.closing_element };
+    return try p.addNode(.style, &items, tree.span(element));
 }
 
 const RawElement = enum { none, style, script };
@@ -661,7 +688,8 @@ fn rawElement(tree: *const ast.Tree, opening: NodeIndex) RawElement {
 
 fn parseRawBody(p: *Parser, opening: NodeIndex, start: u32) Error!?Claim {
     const source = p.tree().source;
-    const end = switch (rawElement(p.tree(), opening)) {
+    const raw = rawElement(p.tree(), opening);
+    const end = switch (raw) {
         .none => return null,
         .style => end: {
             const body = std.mem.trimStart(u8, source[start..], &std.ascii.whitespace);
@@ -671,7 +699,9 @@ fn parseRawBody(p: *Parser, opening: NodeIndex, start: u32) Error!?Claim {
         .script => try scriptEnd(p, start),
     } orelse return try unclosed(p, opening);
     if (end == start) return null;
-    return claimed(try p.addJsxText(.{ .start = start, .end = @intCast(end) }));
+    const span: ast.Span = .{ .start = start, .end = @intCast(end) };
+    if (raw == .script) return claimed(try p.addJsxText(span));
+    return claimed(try css.parse(p, span) orelse try p.addJsxText(span));
 }
 
 fn scriptEnd(p: *Parser, start: u32) Error!?usize {
@@ -784,6 +814,13 @@ fn isOutput(tree: *const ast.Tree, node: NodeIndex) bool {
     };
 }
 
+fn isKind(tree: *const ast.Tree, node: NodeIndex, kind: Node) bool {
+    return switch (tree.data(node)) {
+        .dialect => |data| data.kind == kind,
+        else => false,
+    };
+}
+
 fn isElement(tree: *const ast.Tree, node: NodeIndex) bool {
     return switch (tree.data(node)) {
         .jsx_element, .jsx_fragment => true,
@@ -838,7 +875,7 @@ fn commentAt(source: []const u8, index: u32, run_start: u32) ?Comment {
 fn textEnd(p: *const Parser, start: u32) u32 {
     const source = p.tree().source;
     var index = start;
-    while (std.mem.findAnyPos(u8, source, index, "{}<@/")) |found| : (index += 1) {
+    while (findAny(source, index, "{}<@/")) |found| : (index += 1) {
         index = @intCast(found);
         const ends = switch (source[index]) {
             '{', '}' => true,
@@ -850,6 +887,16 @@ fn textEnd(p: *const Parser, start: u32) u32 {
         if (ends) return index;
     }
     return @intCast(source.len);
+}
+
+pub fn findAny(source: []const u8, start: usize, comptime set: []const u8) ?usize {
+    const table = comptime table: {
+        var table: [256]bool = @splat(false);
+        for (set) |byte| table[byte] = true;
+        break :table table;
+    };
+    for (source[start..], start..) |byte, index| if (table[byte]) return index;
+    return null;
 }
 
 inline fn claimed(node: NodeIndex) Claim {

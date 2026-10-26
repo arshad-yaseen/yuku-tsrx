@@ -64,6 +64,9 @@ test.each([
   ["function A() @{ <div>{a;}</div> }", "TSRX1007"],
   ["const a = <{undefined} />;", "TSRX2014"],
   ["const a = <{...a} />;", "TSRX2014"],
+  ["function A() @{ <style>.a { b: }</style> }", "TSRX3013"],
+  ["function A() @{ <style>.a > { b: c }</style> }", "TSRX3013"],
+  ["function A() @{ <style>.a { b: c</style> }", "TSRX3013"],
   ["const a = <div>a <é /></div>;", null],
   ["import { x } from type;", null],
 ])("%s", (source, error) => {
@@ -104,6 +107,64 @@ test("an `@for` head binds its index, and assigns to a pattern without a declara
 test("a script is one text as written", () => {
   expect(render("function A() @{ <script>if (a < b) {}</script> }")).toMatchObject({
     children: [{ type: "JSXText", raw: "if (a < b) {}" }],
+  });
+});
+
+test("a style element reads its CSS into the nodes @tsrx/core does", () => {
+  const style = render("function A() @{ <style>.a > b:hover, & p { color: red }</style> }");
+  expect(style).toMatchObject({
+    type: "JSXStyleElement",
+    children: [
+      {
+        type: "StyleSheet",
+        source: ".a > b:hover, & p { color: red }",
+        children: [
+          {
+            type: "Rule",
+            prelude: {
+              type: "SelectorList",
+              children: [
+                {
+                  type: "ComplexSelector",
+                  children: [
+                    {
+                      type: "RelativeSelector",
+                      combinator: null,
+                      selectors: [{ type: "ClassSelector", name: "a" }],
+                    },
+                    {
+                      combinator: { type: "Combinator", name: ">" },
+                      selectors: [
+                        { type: "TypeSelector", name: "b" },
+                        { type: "PseudoClassSelector", name: "hover", args: null },
+                      ],
+                    },
+                  ],
+                },
+                {
+                  children: [
+                    { selectors: [{ type: "NestingSelector", name: "&" }] },
+                    { combinator: { name: " " }, selectors: [{ name: "p" }] },
+                  ],
+                },
+              ],
+            },
+            block: { type: "Block", children: [{ property: "color", value: "red" }] },
+          },
+        ],
+      },
+    ],
+  });
+  expect(render("function A() @{ <style></style> }")).toMatchObject({
+    children: [{ type: "StyleSheet", source: "", children: [] }],
+  });
+});
+
+test("a style element keeps CSS it can't read as text", () => {
+  const { program, diagnostics } = parseTsrx("function A() @{ <style>.a { b: }</style> }");
+  expect(diagnostics.map((d) => d.message)).toEqual(["TSRX3013: CSS Declaration cannot be empty"]);
+  expect(program.body[0]).toMatchObject({
+    body: { render: { type: "JSXElement", children: [{ type: "JSXText", raw: ".a { b: }" }] } },
   });
 });
 
