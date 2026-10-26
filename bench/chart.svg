@@ -5,9 +5,9 @@
   </style>
   <text x="86" y="11" text-anchor="end">yuku-tsrx</text>
   <rect x="96" y="0" width="29" height="22" rx="4" fill="#FF6B35"/>
-  <text x="133" y="11">3.4 µs</text>
+  <text x="133" y="11">3.6 µs</text>
   <text x="86" y="41" text-anchor="end">@tsrx/core</text>
   <rect x="96" y="30" width="464" height="22" rx="4" fill="#3A86FF"/>
-  <text x="568" y="41">54.8 µs</text>
-  <text class="ratio" x="552" y="41" text-anchor="end">16.23×</text>
+  <text x="568" y="41">56.3 µs</text>
+  <text class="ratio" x="552" y="41" text-anchor="end">15.76×</text>
 </svg>

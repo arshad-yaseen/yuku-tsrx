@@ -97,6 +97,9 @@ const printers = {
     for (const child of node.children) p.node(child);
     p.node(node.closingElement);
   },
+  StyleSheet(node, p) {
+    p.write(node.source);
+  },
 } satisfies Printers & Record<"TSRXSwitchCase", (node: SwitchCase, p: Printer) => void>;
 
 function printIf(keyword: string, node: JSXIfExpression | IfStatement, p: Printer): void {

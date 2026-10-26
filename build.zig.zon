@@ -3,8 +3,8 @@
     .version = "0.1.0",
     .dependencies = .{
         .yuku = .{
-            .url = "git+https://github.com/yuku-toolchain/yuku.git#bb688a808dcfe6dc55805b03de58090009ef54fb",
-            .hash = "yuku-0.23.0-m6ranvSIEgB7-H8Tzx9rIwJromaEO05PvvZTe03ex0yM",
+            .url = "git+https://github.com/yuku-toolchain/yuku.git#33eff446f298526b2b136288c646c0b9e8cf75f3",
+            .hash = "yuku-0.24.1-m6ransicEgDBjxWzJdLRHk5gIoCtiZa0kVQ8Iiv7AO9W",
         },
     },
     .fingerprint = 0xc799211be0d98b71,
