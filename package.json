@@ -26,7 +26,7 @@
   ],
   "scripts": {
     "build": "zig build && tsdown",
-    "test": "bun run build && bun test",
+    "test": "bun run build && zig build test && bun test",
     "typecheck": "tsc",
     "bench": "bun run build && node bench/index.ts",
     "sync": "bun test/sync.ts",

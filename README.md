@@ -30,6 +30,23 @@ print(file).code;
 
 It runs natively in Node.js 16.4 or newer, Bun, and Deno on macOS, Linux, and Windows, and as WebAssembly in Workers, browsers, and everywhere else.
 
+## Zig
+
+```bash
+zig fetch --save git+https://github.com/yuku-toolchain/yuku-tsrx.git
+```
+
+```zig
+// build.zig
+const tsrx = b.dependency("yuku_tsrx", .{ .target = target, .optimize = optimize });
+my_module.addImport("parser", tsrx.module("parser"));
+```
+
+```zig
+var tree = try parser.parse(allocator, source, .{});
+defer tree.deinit();
+```
+
 ## Benchmark
 
 Parsing the 1,987 TSRX sources of the [test suite](test/suite) against the official parser, [`@tsrx/core`](https://www.npmjs.com/package/@tsrx/core), both building an ESTree AST.
