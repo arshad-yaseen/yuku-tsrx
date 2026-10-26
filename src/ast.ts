@@ -4,6 +4,7 @@ import type {
   BlockStatement,
   CatchClause,
   Expression,
+  ForStatementLeft,
   Identifier,
   IfStatement,
   JSXClosingElement,
@@ -13,7 +14,6 @@ import type {
   JSXText,
   Statement,
   SwitchCase,
-  VariableDeclaration,
 } from "yuku";
 
 declare module "yuku" {
@@ -59,7 +59,7 @@ export interface JSXForExpression extends BaseNode {
   type: "JSXForExpression";
   statementType: "ForOfStatement";
   await: boolean;
-  left: VariableDeclaration | Expression;
+  left: ForStatementLeft;
   right: Expression;
   index: Identifier | null;
   key: Expression | null;
